@@ -1,46 +1,31 @@
+
 import UIKit
 
 class ProfileViewController: UIViewController {
 
-    private let nameLabel: UILabel = {
-        let label = UILabel()
-        label.text = "Имя пользователя"
-        label.font = UIFont.systemFont(ofSize: 24, weight: .bold)
-        label.textAlignment = .center
-        return label
-    }()
-
-    private let profileImageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.image = UIImage(systemName: "person.circle.fill")
-        imageView.tintColor = .systemBlue
-        imageView.contentMode = .scaleAspectFit
-        imageView.clipsToBounds = true
-        return imageView
-    }()
-
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
-        title = "Профиль"
-        setupLayout()
+        view.backgroundColor = .systemBlue
+        setupCloseButton()
     }
 
-    private func setupLayout() {
-        view.addSubview(profileImageView)
-        view.addSubview(nameLabel)
+    private func setupCloseButton() {
+        let button = UIButton(type: .system)
+        button.setTitle("Закрыть", for: .normal)
+        button.tintColor = .white
+        button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 18)
+        button.addTarget(self, action: #selector(dismissSelf), for: .touchUpInside)
 
-        profileImageView.translatesAutoresizingMaskIntoConstraints = false
-        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        button.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(button)
 
         NSLayoutConstraint.activate([
-            profileImageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            profileImageView.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
-            profileImageView.widthAnchor.constraint(equalToConstant: 120),
-            profileImageView.heightAnchor.constraint(equalToConstant: 120),
-
-            nameLabel.topAnchor.constraint(equalTo: profileImageView.bottomAnchor, constant: 20),
-            nameLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor)
+            button.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            button.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
         ])
+    }
+
+    @objc private func dismissSelf() {
+        dismiss(animated: true, completion: nil)
     }
 }
