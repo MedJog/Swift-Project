@@ -1,56 +1,66 @@
+
 import UIKit
+import WebKit
 
-class LoginViewController: UIViewController {
+class LoginViewController: UIViewController, WKNavigationDelegate {
 
-    let loginField = UITextField()
-    let passwordField = UITextField()
-    let loginButton = UIButton(type: .system)
+    var webView: WKWebView!
+
+    override func loadView() {
+        super.loadView()
+        webView = WKWebView()
+        webView.navigationDelegate = self
+        view = webView
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
 
-        setupUI()
+        let clientID = "53670850" // Замените на свой ID приложения VK
+        let redirectURI = "https://oauth.vk.com/blank.html"
+        let scope = "friends"  // Запрашиваем права на список друзей
+
+        let authURLString = "https://oauth.vk.com/authorize?client_id=\(clientID)&display=mobile&redirect_uri=\(redirectURI)&scope=\(scope)&response_type=token&v=5.131"
+        guard let url = URL(string: authURLString) else { return }
+
+        let request = URLRequest(url: url)
+        webView.load(request)
     }
 
-    private func setupUI() {
-        loginField.translatesAutoresizingMaskIntoConstraints = false
-        loginField.placeholder = "Логин"
-        loginField.borderStyle = .roundedRect
+    // Обработка переходов
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let url = navigationResponse.response.url,
+           url.absoluteString.starts(with: "https://oauth.vk.com/blank.html") {
+            if let fragment = url.fragment {
+                // Парсим токен из URL-фрагмента
+                let params = fragment.components(separatedBy: "&")
+                var token: String?
+                for param in params {
+                    let parts = param.components(separatedBy: "=")
+                    if parts.count == 2 && parts[0] == "access_token" {
+                        token = parts[1]
+                        break
+                    }
+                }
 
-        passwordField.translatesAutoresizingMaskIntoConstraints = false
-        passwordField.placeholder = "Пароль"
-        passwordField.borderStyle = .roundedRect
-        passwordField.isSecureTextEntry = true
+                if let token = token {
+                    // Сохраняем токен
+                    UserDefaults.standard.set(token, forKey: "vk_access_token")
 
-        loginButton.translatesAutoresizingMaskIntoConstraints = false
-        loginButton.setTitle("Войти", for: .normal)
-        loginButton.addTarget(self, action: #selector(loginTapped), for: .touchUpInside)
+                    // Переходим на экран друзей
+                    DispatchQueue.main.async {
+                        let friendsVC = FriendsViewController()
+                        let navVC = UINavigationController(rootViewController: friendsVC)
+                        navVC.modalPresentationStyle = .fullScreen
+                        self.present(navVC, animated: true, completion: nil)
+                    }
 
-        view.addSubview(loginField)
-        view.addSubview(passwordField)
-        view.addSubview(loginButton)
+                    decisionHandler(.cancel)
+                    return
+                }
+            }
+        }
 
-        NSLayoutConstraint.activate([
-            loginField.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loginField.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -60),
-            loginField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 40),
-            loginField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -40),
-
-            passwordField.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            passwordField.topAnchor.constraint(equalTo: loginField.bottomAnchor, constant: 20),
-            passwordField.leadingAnchor.constraint(equalTo: loginField.leadingAnchor),
-            passwordField.trailingAnchor.constraint(equalTo: loginField.trailingAnchor),
-
-            loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loginButton.topAnchor.constraint(equalTo: passwordField.bottomAnchor, constant: 30)
-        ])
-    }
-
-    @objc func loginTapped() {
-        let chatListVC = ChatListViewController()
-        let navController = UINavigationController(rootViewController: chatListVC)
-        navController.modalPresentationStyle = .fullScreen
-        present(navController, animated: true, completion: nil)
+        decisionHandler(.allow)
     }
 }
