@@ -1,75 +1,74 @@
 import UIKit
 
-struct Friend {
-    let id: Int
-    let name: String
-    let isOnline: Bool
-}
+class FriendsViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
 
-class FriendsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
-
-    var friends: [Friend] = []
-    let tableView = UITableView()
+    private let tableView = UITableView()
+    private var friends: [Friend] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Друзья"
         view.backgroundColor = .white
-
-        tableView.frame = view.bounds
-        tableView.dataSource = self
-        tableView.delegate = self
-        view.addSubview(tableView)
-
-        loadFriends()
+        setupTableView()
+        setupNavigationBar()
+        fetchFriends()
     }
 
-    func loadFriends() {
+    private func setupNavigationBar() {
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Профиль",
+            style: .plain,
+            target: self,
+            action: #selector(openProfile)
+        )
+    }
+
+    @objc private func openProfile() {
+        let profileVC = ProfileViewController()
+        navigationController?.pushViewController(profileVC, animated: true)
+    }
+
+    private func setupTableView() {
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "Cell")
+        tableView.frame = view.bounds
+        view.addSubview(tableView)
+    }
+
+    private func fetchFriends() {
         let token = Session.shared.token
-        let userId = Session.shared.userId
+        if token.isEmpty { return }
 
-        guard let url = URL(string: "https://api.vk.com/method/friends.get?user_id=\(userId)&fields=online&access_token=\(token)&v=5.131") else { return }
+        let urlString = "https://api.vk.com/method/friends.get?access_token=\(token)&v=5.199&fields=online,first_name,last_name"
+        guard let url = URL(string: urlString) else { return }
 
-        URLSession.shared.dataTask(with: url) { data, _, _ in
+        URLSession.shared.dataTask(with: url) { data, response, error in
             guard let data = data else { return }
 
             do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let response = json["response"] as? [String: Any],
-                   let items = response["items"] as? [[String: Any]] {
-
-                    self.friends = items.compactMap {
-                        guard let id = $0["id"] as? Int,
-                              let firstName = $0["first_name"] as? String,
-                              let lastName = $0["last_name"] as? String,
-                              let isOnline = $0["online"] as? Int
-                        else { return nil }
-
-                        return Friend(id: id, name: "\(firstName) \(lastName)", isOnline: isOnline == 1)
-                    }
-
-                    DispatchQueue.main.async {
-                        self.tableView.reloadData()
-                    }
+                let result = try JSONDecoder().decode(FriendsResponse.self, from: data)
+                self.friends = result.response.items
+                DispatchQueue.main.async {
+                    self.tableView.reloadData()
                 }
             } catch {
-                print("Ошибка при обработке JSON: \(error)")
+                print("Ошибка парсинга: \(error)")
             }
         }.resume()
     }
 
-    // MARK: - UITableView
+    // MARK: - Table View
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        friends.count
+        return friends.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let friend = friends[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        cell.textLabel?.text = friend.name
-        cell.detailTextLabel?.text = friend.isOnline ? "Онлайн" : "Оффлайн"
-        cell.detailTextLabel?.textColor = friend.isOnline ? .systemGreen : .systemGray
+        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
+        let onlineStatus = friend.online == 1 ? "🟢" : "⚪️"
+        cell.textLabel?.text = "\(friend.firstName) \(friend.lastName) \(onlineStatus)"
         return cell
     }
 }
