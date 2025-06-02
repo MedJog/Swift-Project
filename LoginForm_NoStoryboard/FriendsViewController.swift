@@ -1,55 +1,36 @@
 import UIKit
 
+struct Friend {
+    let id: Int
+    let name: String
+    let isOnline: Bool
+}
+
 class FriendsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
 
-    private var friends: [String] = []
-
-    private let tableView = UITableView()
-    private let groupsButton = UIButton(type: .system)
-    private let photosButton = UIButton(type: .system)
+    var friends: [Friend] = []
+    let tableView = UITableView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
         title = "Друзья"
+        view.backgroundColor = .white
 
-        // Настройка таблицы
-        tableView.frame = view.bounds.inset(by: UIEdgeInsets(top: 0, left: 0, bottom: 100, right: 0))
+        tableView.frame = view.bounds
         tableView.dataSource = self
         tableView.delegate = self
         view.addSubview(tableView)
 
-        // Настройка кнопки групп
-        groupsButton.frame = CGRect(x: 0, y: view.bounds.height - 100, width: view.bounds.width / 2, height: 50)
-        groupsButton.setTitle("Показать группы", for: .normal)
-        groupsButton.addTarget(self, action: #selector(showGroups), for: .touchUpInside)
-        view.addSubview(groupsButton)
-
-        // Настройка кнопки фотографий
-        photosButton.frame = CGRect(x: view.bounds.width / 2, y: view.bounds.height - 100, width: view.bounds.width / 2, height: 50)
-        photosButton.setTitle("Показать фотографии", for: .normal)
-        photosButton.addTarget(self, action: #selector(showPhotos), for: .touchUpInside)
-        view.addSubview(photosButton)
-
-        fetchFriends()
+        loadFriends()
     }
 
-    // MARK: - Данные
+    func loadFriends() {
+        let token = Session.shared.token
+        let userId = Session.shared.userId
 
-    func fetchFriends() {
-        guard let token = UserDefaults.standard.string(forKey: "vk_access_token") else {
-            print("Токен не найден")
-            return
-        }
+        guard let url = URL(string: "https://api.vk.com/method/friends.get?user_id=\(userId)&fields=online&access_token=\(token)&v=5.131") else { return }
 
-        let urlString = "https://api.vk.com/method/friends.get?access_token=\(token)&v=5.131&order=name&fields=nickname"
-        guard let url = URL(string: urlString) else { return }
-
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            if let error = error {
-                print("Ошибка запроса друзей: \(error.localizedDescription)")
-                return
-            }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
             guard let data = data else { return }
 
             do {
@@ -57,42 +38,38 @@ class FriendsViewController: UIViewController, UITableViewDataSource, UITableVie
                    let response = json["response"] as? [String: Any],
                    let items = response["items"] as? [[String: Any]] {
 
-                    self.friends = items.compactMap { $0["first_name"] as? String }
+                    self.friends = items.compactMap {
+                        guard let id = $0["id"] as? Int,
+                              let firstName = $0["first_name"] as? String,
+                              let lastName = $0["last_name"] as? String,
+                              let isOnline = $0["online"] as? Int
+                        else { return nil }
+
+                        return Friend(id: id, name: "\(firstName) \(lastName)", isOnline: isOnline == 1)
+                    }
+
                     DispatchQueue.main.async {
                         self.tableView.reloadData()
                     }
-                } else {
-                    print("Не удалось распарсить JSON друзей")
                 }
             } catch {
-                print("Ошибка парсинга друзей: \(error.localizedDescription)")
+                print("Ошибка при обработке JSON: \(error)")
             }
-        }
-        task.resume()
+        }.resume()
     }
 
-    // MARK: - UITableViewDataSource
+    // MARK: - UITableView
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return friends.count
+        friends.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-
-        let cell = UITableViewCell(style: .default, reuseIdentifier: "friendCell")
-        cell.textLabel?.text = friends[indexPath.row]
+        let friend = friends[indexPath.row]
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        cell.textLabel?.text = friend.name
+        cell.detailTextLabel?.text = friend.isOnline ? "Онлайн" : "Оффлайн"
+        cell.detailTextLabel?.textColor = friend.isOnline ? .systemGreen : .systemGray
         return cell
-    }
-
-    // MARK: - Actions
-
-    @objc func showGroups() {
-        let groupsVC = GroupsViewController()
-        navigationController?.pushViewController(groupsVC, animated: true)
-    }
-
-    @objc func showPhotos() {
-        let photosVC = PhotosViewController()
-        navigationController?.pushViewController(photosVC, animated: true)
     }
 }
