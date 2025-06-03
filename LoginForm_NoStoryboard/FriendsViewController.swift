@@ -1,79 +1,78 @@
-
 import UIKit
+import CoreData
 
-final class FriendsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+class FriendsViewController: UITableViewController {
 
-    private let tableView = UITableView()
-    private var friends: [Friend] = []
-    private let refreshControl = UIRefreshControl()
+    var friends: [Friend] = []
+    let coreDataManager = CoreDataManager.shared
+    let networkService = VKNetworkService()
+    let refresh = UIRefreshControl()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Друзья"
-        view.backgroundColor = .systemBackground
-
-        setupTableView()
-        loadFriendsFromStorage()
-
-        // Имитируем обновление данных через 1 сек
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.fetchFriendsFromNetwork()
-        }
-    }
-
-    private func setupTableView() {
-        tableView.dataSource = self
-        tableView.delegate = self
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "FriendCell")
-        tableView.frame = view.bounds
-        view.addSubview(tableView)
 
-        refreshControl.addTarget(self, action: #selector(refreshPulled), for: .valueChanged)
-        tableView.refreshControl = refreshControl
+        refresh.addTarget(self, action: #selector(refreshFriends), for: .valueChanged)
+        tableView.refreshControl = refresh
+
+        loadFriendsFromStorage()
+        loadFriendsFromNetwork()
     }
 
-    private func loadFriendsFromStorage() {
-        friends = CoreDataManager.shared.fetchFriends()
+    func loadFriendsFromStorage() {
+        friends = coreDataManager.fetchFriends()
         tableView.reloadData()
     }
 
-    @objc private func refreshPulled() {
-        fetchFriendsFromNetwork()
+    @objc func refreshFriends() {
+        loadFriendsFromNetwork()
     }
 
-    private func fetchFriendsFromNetwork() {
-        // Имитируем загрузку с сети
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            let fakeFriends = [
-                Friend(id: 1, firstName: "Анна", lastName: "Смирнова", online: 1),
-                Friend(id: 2, firstName: "Иван", lastName: "Иванов", online: 0),
-                Friend(id: 3, firstName: "Ольга", lastName: "Петрова", online: 1)
-            ]
+    func loadFriendsFromNetwork() {
+        networkService.fetchFriends { [weak self] result in
+            DispatchQueue.main.async {
+                self?.refresh.endRefreshing()
 
-            self.friends = fakeFriends
-            CoreDataManager.shared.saveFriends(fakeFriends)
-            self.tableView.reloadData()
-            self.refreshControl.endRefreshing()
+                switch result {
+                case .success(let newFriends):
+                    self?.friends = newFriends
+                    self?.coreDataManager.saveFriends(newFriends)
+                    self?.tableView.reloadData()
+                case .failure(let error):
+                    self?.showErrorAlert(error: error)
+                }
+            }
         }
     }
 
-    // MARK: - TableView DataSource & Delegate
-
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return friends.count
+    func showErrorAlert(error: Error) {
+        let alert = UIAlertController(
+            title: "Ошибка",
+            message: "Не удалось загрузить список друзей: \(error.localizedDescription)",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Ок", style: .default))
+        present(alert, animated: true)
     }
 
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    // MARK: - TableView
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        friends.count
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let friend = friends[indexPath.row]
         let cell = tableView.dequeueReusableCell(withIdentifier: "FriendCell", for: indexPath)
         cell.textLabel?.text = "\(friend.firstName) \(friend.lastName)"
-        cell.detailTextLabel?.text = friend.online == 1 ? "Online" : "Offline"
+        cell.detailTextLabel?.text = friend.online == 1 ? "Онлайн" : ""
         return cell
     }
 
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        let profileVC = FriendProfileViewController()
-        profileVC.friend = friends[indexPath.row]
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let friend = friends[indexPath.row]
+        let profileVC = FriendProfileViewController(friend: friend)
         navigationController?.pushViewController(profileVC, animated: true)
     }
 }
