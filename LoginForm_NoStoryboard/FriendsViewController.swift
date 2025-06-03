@@ -1,3 +1,4 @@
+
 import UIKit
 import CoreData
 
@@ -7,6 +8,7 @@ class FriendsViewController: UITableViewController {
     let coreDataManager = CoreDataManager.shared
     let networkService = VKNetworkService()
     let refresh = UIRefreshControl()
+    let activityIndicator = UIActivityIndicatorView(style: .medium)
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -16,8 +18,15 @@ class FriendsViewController: UITableViewController {
         refresh.addTarget(self, action: #selector(refreshFriends), for: .valueChanged)
         tableView.refreshControl = refresh
 
+        setupActivityIndicator()
+
         loadFriendsFromStorage()
-        loadFriendsFromNetwork()
+        loadFriendsFromNetwork(showSpinner: true)
+    }
+
+    func setupActivityIndicator() {
+        activityIndicator.hidesWhenStopped = true
+        navigationItem.rightBarButtonItem = UIBarButtonItem(customView: activityIndicator)
     }
 
     func loadFriendsFromStorage() {
@@ -26,13 +35,18 @@ class FriendsViewController: UITableViewController {
     }
 
     @objc func refreshFriends() {
-        loadFriendsFromNetwork()
+        loadFriendsFromNetwork(showSpinner: false)
     }
 
-    func loadFriendsFromNetwork() {
+    func loadFriendsFromNetwork(showSpinner: Bool) {
+        if showSpinner {
+            showLoading(true)
+        }
+
         networkService.fetchFriends { [weak self] result in
             DispatchQueue.main.async {
                 self?.refresh.endRefreshing()
+                self?.showLoading(false)
 
                 switch result {
                 case .success(let newFriends):
@@ -43,6 +57,14 @@ class FriendsViewController: UITableViewController {
                     self?.showErrorAlert(error: error)
                 }
             }
+        }
+    }
+
+    func showLoading(_ isLoading: Bool) {
+        if isLoading {
+            activityIndicator.startAnimating()
+        } else {
+            activityIndicator.stopAnimating()
         }
     }
 
