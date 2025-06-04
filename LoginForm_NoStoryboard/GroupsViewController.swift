@@ -1,70 +1,55 @@
+
 import UIKit
 
-class GroupsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
-
-    private var groups: [String] = []
-
-    private let tableView = UITableView()
+final class GroupsViewController: UIViewController {
+    private var tableView = UITableView()
+    private var viewModels: [GroupViewModel] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
-        title = "Группы"
-
-        tableView.frame = view.bounds
-        tableView.dataSource = self
-        tableView.delegate = self
-
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
-
-        view.addSubview(tableView)
-
+        setupTableView()
         fetchGroups()
     }
 
+    private func setupTableView() {
+        view.addSubview(tableView)
+        tableView.frame = view.bounds
+        tableView.dataSource = self
+        tableView.delegate = self
+    }
+
+    private func fetchGroups() {
+        VKService.shared.fetchGroups { [weak self] result in
+            switch result {
+            case .success(let groups):
+                self?.viewModels = groups.map { GroupViewModel(group: $0) }
+                DispatchQueue.main.async {
+                    self?.tableView.reloadData()
+                }
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self?.showError(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func showError(message: String) {
+        let alert = UIAlertController(title: "Ошибка", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Ок", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+extension GroupsViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return groups.count
+        return viewModels.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-        cell.textLabel?.text = groups[indexPath.row]
+        let model = viewModels[indexPath.row]
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        cell.textLabel?.text = model.name
         return cell
-    }
-
-    func fetchGroups() {
-        guard let token = UserDefaults.standard.string(forKey: "vk_access_token") else {
-            print("Токен не найден")
-            return
-        }
-
-        let urlString = "https://api.vk.com/method/groups.get?access_token=\(token)&v=5.131&extended=1"
-        guard let url = URL(string: urlString) else { return }
-
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            if let error = error {
-                print("Ошибка запроса групп: \(error.localizedDescription)")
-                return
-            }
-            guard let data = data else { return }
-
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let response = json["response"] as? [String: Any],
-                   let items = response["items"] as? [[String: Any]] {
-
-                    self.groups = items.compactMap { $0["name"] as? String }
-
-                    DispatchQueue.main.async {
-                        self.tableView.reloadData()
-                    }
-                } else {
-                    print("Не удалось распарсить JSON групп")
-                }
-            } catch {
-                print("Ошибка парсинга групп: \(error.localizedDescription)")
-            }
-        }
-        task.resume()
     }
 }
