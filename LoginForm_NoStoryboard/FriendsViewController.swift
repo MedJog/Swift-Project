@@ -1,100 +1,83 @@
-
 import UIKit
 import CoreData
 
-class FriendsViewController: UITableViewController {
-
-    var friends: [Friend] = []
-    let coreDataManager = CoreDataManager.shared
-    let networkService = VKNetworkService()
-    let refresh = UIRefreshControl()
-    let activityIndicator = UIActivityIndicatorView(style: .medium)
+final class FriendsViewController: UIViewController {
+    private var tableView = UITableView()
+    private var viewModels: [FriendViewModel] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Друзья"
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "FriendCell")
-
-        refresh.addTarget(self, action: #selector(refreshFriends), for: .valueChanged)
-        tableView.refreshControl = refresh
-
-        setupActivityIndicator()
-
-        loadFriendsFromStorage()
-        loadFriendsFromNetwork(showSpinner: true)
+        setupTableView()
+        loadFriendsFromCoreData()
+        fetchFriends()
     }
 
-    func setupActivityIndicator() {
-        activityIndicator.hidesWhenStopped = true
-        navigationItem.rightBarButtonItem = UIBarButtonItem(customView: activityIndicator)
+    private func setupTableView() {
+        view.addSubview(tableView)
+        tableView.frame = view.bounds
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.refreshControl = UIRefreshControl()
+        tableView.refreshControl?.addTarget(self, action: #selector(refreshFriends), for: .valueChanged)
     }
 
-    func loadFriendsFromStorage() {
-        friends = coreDataManager.fetchFriends()
-        tableView.reloadData()
+    @objc private func refreshFriends() {
+        fetchFriends()
     }
 
-    @objc func refreshFriends() {
-        loadFriendsFromNetwork(showSpinner: false)
-    }
-
-    func loadFriendsFromNetwork(showSpinner: Bool) {
-        if showSpinner {
-            showLoading(true)
-        }
-
-        networkService.fetchFriends { [weak self] result in
+    private func fetchFriends() {
+        VKService.shared.fetchFriends { [weak self] result in
             DispatchQueue.main.async {
-                self?.refresh.endRefreshing()
-                self?.showLoading(false)
+                self?.tableView.refreshControl?.endRefreshing()
+            }
 
-                switch result {
-                case .success(let newFriends):
-                    self?.friends = newFriends
-                    self?.coreDataManager.saveFriends(newFriends)
-                    self?.tableView.reloadData()
-                case .failure(let error):
-                    self?.showErrorAlert(error: error)
+            switch result {
+            case .success(let friends):
+                CoreDataManager.shared.saveFriends(friends)
+                self?.updateViewModels(with: friends)
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self?.showError(message: error.localizedDescription)
                 }
             }
         }
     }
 
-    func showLoading(_ isLoading: Bool) {
-        if isLoading {
-            activityIndicator.startAnimating()
-        } else {
-            activityIndicator.stopAnimating()
+    private func loadFriendsFromCoreData() {
+        let friends = CoreDataManager.shared.loadFriends()
+        updateViewModels(with: friends)
+    }
+
+    private func updateViewModels(with friends: [Friend]) {
+        self.viewModels = friends.map { FriendViewModel(friend: $0) }
+        DispatchQueue.main.async {
+            self.tableView.reloadData()
         }
     }
 
-    func showErrorAlert(error: Error) {
-        let alert = UIAlertController(
-            title: "Ошибка",
-            message: "Не удалось загрузить список друзей: \(error.localizedDescription)",
-            preferredStyle: .alert
-        )
+    private func showError(message: String) {
+        let alert = UIAlertController(title: "Ошибка", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Ок", style: .default))
         present(alert, animated: true)
     }
+}
 
-    // MARK: - TableView
-
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        friends.count
+extension FriendsViewController: UITableViewDataSource, UITableViewDelegate {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return viewModels.count
     }
 
-    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let friend = friends[indexPath.row]
-        let cell = tableView.dequeueReusableCell(withIdentifier: "FriendCell", for: indexPath)
-        cell.textLabel?.text = "\(friend.firstName) \(friend.lastName)"
-        cell.detailTextLabel?.text = friend.online == 1 ? "Онлайн" : ""
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let model = viewModels[indexPath.row]
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        cell.textLabel?.text = model.fullName
+        cell.detailTextLabel?.text = model.isOnline ? "Онлайн" : "Оффлайн"
         return cell
     }
 
-    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        let friend = friends[indexPath.row]
-        let profileVC = FriendProfileViewController(friend: friend)
-        navigationController?.pushViewController(profileVC, animated: true)
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let selected = viewModels[indexPath.row]
+        let vc = FriendProfileViewController(friendId: selected.id, name: selected.fullName)
+        navigationController?.pushViewController(vc, animated: true)
     }
 }
