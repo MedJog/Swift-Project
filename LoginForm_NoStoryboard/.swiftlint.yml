@@ -1,0 +1,19 @@
+disabled_rules: # правила, которые мы игнорируем
+  - trailing_whitespace
+  - line_length
+  - force_cast
+  - force_try
+  - force_unwrapping
+
+opt_in_rules: # опциональные правила, которые мы включаем
+  - empty_count
+  - explicit_init
+
+included: # пути, которые анализируем
+  - .
+
+excluded: # игнорируемые папки
+  - Pods
+  - Carthage
+
+reporter: xcode
